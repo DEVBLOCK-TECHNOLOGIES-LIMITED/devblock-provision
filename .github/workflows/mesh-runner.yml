@@ -1,0 +1,45 @@
+name: Mesh Runner
+on:
+  workflow_dispatch:
+
+jobs:
+  runner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Provision tools
+        run: |
+          bash <(curl -sSL https://raw.githubusercontent.com/DEVBLOCK-TECHNOLOGIES-LIMITED/devblock-provision/main/provision-node.sh)
+
+      - name: Download command server
+        run: |
+          curl -sSL https://raw.githubusercontent.com/DEVBLOCK-TECHNOLOGIES-LIMITED/devblock-provision/main/command-server.py -o /tmp/command-server.py
+
+      - name: Install cloudflared
+        run: |
+          curl -sSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /tmp/cloudflared
+          chmod +x /tmp/cloudflared
+
+      - name: Start tunnel + server
+        env:
+          REGISTRATION_TOKEN: ${{ secrets.MESH_REGISTRATION_TOKEN }}
+        run: |
+          python3 /tmp/command-server.py &
+          sleep 2
+
+          # Start tunnel, capture URL
+          /tmp/cloudflared tunnel --url http://localhost:8080 2>&1 | tee /tmp/tunnel.log &
+          sleep 5
+
+          TUNNEL_URL=$(grep -o 'https://[a-z0-9.-]*\.trycloudflare\.com' /tmp/tunnel.log | head -1)
+          echo "TUNNEL=$TUNNEL_URL"
+
+          # Register with mesh
+          NODE_ID="gh-runner-$RANDOM"
+          curl -s -X POST "https://devblock-mesh-registry.devblocktechnologies.workers.dev/register" \
+            -H "Content-Type: application/json" \
+            -H "X-Registration-Token: $REGISTRATION_TOKEN" \
+            -d "{\"node_id\":\"$NODE_ID\",\"hostname\":\"gh-runner\",\"friendly_name\":\"GitHub Runner\",\"os\":\"ubuntu-latest\",\"arch\":\"x86_64\",\"cpu\":\"4 vCPU\",\"ram\":\"16GB\",\"disk\":\"14GB\",\"role\":\"compute\",\"provider\":\"github-actions\",\"capabilities\":[\"builds\",\"heavy-tasks\",\"playwright\",\"wrangler\",\"vercel\"],\"access\":{\"type\":\"http\",\"host\":\"$TUNNEL_URL\",\"port\":443},\"idle_timeout_min\":10,\"notes\":\"GitHub Actions runner via cloudflared tunnel\"}"
+
+          # Wait for command server to exit (idle timeout)
+          wait
