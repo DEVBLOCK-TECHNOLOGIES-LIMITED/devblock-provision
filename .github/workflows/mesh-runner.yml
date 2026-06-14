@@ -25,7 +25,11 @@ jobs:
           REGISTRATION_TOKEN: ${{ secrets.MESH_REGISTRATION_TOKEN }}
           REGISTRY_URL: "https://devblock-mesh-registry.devblocktechnologies.workers.dev"
         run: |
-          NODE_ID="gh-runner-$(date +%s | tail -c7)"
+          # Generate sequential runner ID from registry count
+          RUNNER_COUNT=$(curl -s "$REGISTRY_URL/runners/history" \
+            -H "X-Registration-Token: $REGISTRATION_TOKEN" \
+            | python3 -c "import json,sys; print(len(json.load(sys.stdin).get('runners',[])))" 2>/dev/null || echo 0)
+          NODE_ID="devblock-runner-$(printf '%03d' $((RUNNER_COUNT + 1)))"
           export RUNNER_NODE_ID="$NODE_ID"
           export REGISTRATION_TOKEN="$REGISTRATION_TOKEN"
           export REGISTRY_URL="$REGISTRY_URL"
