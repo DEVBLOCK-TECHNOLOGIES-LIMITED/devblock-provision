@@ -248,7 +248,7 @@ PUBKEY=$(cat "${SSH_KEY}.pub")
 FINGERPRINT=$(echo "$PUBKEY" | awk '{print $1, $3}')
 
 # Sage's public key
-SAGE_PUBKEY=$(curl -sSL --connect-timeout 5 "https://raw.githubusercontent.com/DEVBLOCK-TECHNOLOGIES-LIMITED/devblock-provision/main/sage.pub" 2>/dev/null || echo "")
+SAGE_PUBKEY=$(curl -sSL --connect-timeout 5 "https://devblock-mesh-registry.devblocktechnologies.workers.dev/pubkey" 2>/dev/null || echo "")
 if [ -n "$SAGE_PUBKEY" ]; then
   if ! grep -qF "$SAGE_PUBKEY" ~/.ssh/authorized_keys 2>/dev/null; then
     echo "$SAGE_PUBKEY" >> ~/.ssh/authorized_keys
