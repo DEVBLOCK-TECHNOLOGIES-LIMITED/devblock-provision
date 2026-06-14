@@ -38,9 +38,14 @@ jobs:
           # Start cloudflared tunnel
           /tmp/cloudflared tunnel --url http://localhost:8080 2>&1 | tee /tmp/tunnel.log &
           TUNNEL_PID=$!
-          sleep 5
 
-          TUNNEL_URL=$(grep -o 'https://[a-z0-9.-]*\.trycloudflare\.com' /tmp/tunnel.log | head -1)
+          # Poll for tunnel URL (can take 5-15s)
+          TUNNEL_URL=""
+          for i in $(seq 1 20); do
+            TUNNEL_URL=$(grep -o 'https://[a-z0-9.-]*\.trycloudflare\.com' /tmp/tunnel.log | head -1)
+            [[ -n "$TUNNEL_URL" ]] && break
+            sleep 1
+          done
           echo "TUNNEL=$TUNNEL_URL"
 
           if [[ -z "$TUNNEL_URL" ]]; then
