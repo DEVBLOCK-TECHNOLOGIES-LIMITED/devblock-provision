@@ -23,23 +23,48 @@ jobs:
       - name: Start tunnel + server
         env:
           REGISTRATION_TOKEN: ${{ secrets.MESH_REGISTRATION_TOKEN }}
+          REGISTRY_URL: "https://devblock-mesh-registry.devblocktechnologies.workers.dev"
         run: |
+          NODE_ID="gh-runner-$(date +%s | tail -c7)"
+          export RUNNER_NODE_ID="$NODE_ID"
+          export REGISTRATION_TOKEN="$REGISTRATION_TOKEN"
+          export REGISTRY_URL="$REGISTRY_URL"
+
+          # Start command server
           python3 /tmp/command-server.py &
+          SERVER_PID=$!
           sleep 2
 
-          # Start tunnel, capture URL
+          # Start cloudflared tunnel
           /tmp/cloudflared tunnel --url http://localhost:8080 2>&1 | tee /tmp/tunnel.log &
+          TUNNEL_PID=$!
           sleep 5
 
           TUNNEL_URL=$(grep -o 'https://[a-z0-9.-]*\.trycloudflare\.com' /tmp/tunnel.log | head -1)
           echo "TUNNEL=$TUNNEL_URL"
 
+          if [[ -z "$TUNNEL_URL" ]]; then
+            echo "FAILED: could not get tunnel URL"
+            kill $SERVER_PID 2>/dev/null || true
+            exit 1
+          fi
+
           # Register with mesh
-          NODE_ID="gh-runner-$RANDOM"
-          curl -s -X POST "https://devblock-mesh-registry.devblocktechnologies.workers.dev/register" \
+          curl -s -X POST "$REGISTRY_URL/register" \
             -H "Content-Type: application/json" \
             -H "X-Registration-Token: $REGISTRATION_TOKEN" \
             -d "{\"node_id\":\"$NODE_ID\",\"hostname\":\"gh-runner\",\"friendly_name\":\"GitHub Runner\",\"os\":\"ubuntu-latest\",\"arch\":\"x86_64\",\"cpu\":\"4 vCPU\",\"ram\":\"16GB\",\"disk\":\"14GB\",\"role\":\"compute\",\"provider\":\"github-actions\",\"capabilities\":[\"builds\",\"heavy-tasks\",\"playwright\",\"wrangler\",\"vercel\"],\"access\":{\"type\":\"http\",\"host\":\"$TUNNEL_URL\",\"port\":443},\"idle_timeout_min\":10,\"notes\":\"GitHub Actions runner via cloudflared tunnel\"}"
 
-          # Wait for command server to exit (idle timeout)
-          wait
+          echo "RUNNER_READY: $NODE_ID at $TUNNEL_URL"
+
+          # Cleanup handler — catches SIGTERM from GitHub 6h timeout
+          cleanup() {
+            echo "CLEANUP: runner shutting down"
+            curl -s -X POST "$TUNNEL_URL/shutdown" 2>/dev/null || true
+            wait $SERVER_PID 2>/dev/null || true
+            kill $TUNNEL_PID 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          # Wait for command server to self-terminate (idle timeout)
+          wait $SERVER_PID
