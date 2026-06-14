@@ -3,16 +3,14 @@
 # DevBlock Node Provisioner — Single-command setup for new compute nodes
 # =============================================================================
 # Usage (on fresh Ubuntu 24.04):
-#   curl -sSL https://raw.githubusercontent.com/DEVBLOCK-TECHNOLOGIES-LIMITED/sage-bootstrap/main/provision-node.sh | bash
+#   curl -sSL https://raw.githubusercontent.com/DEVBLOCK-TECHNOLOGIES-LIMITED/devblock-provision/main/provision-node.sh | DEVBLOCK_REGISTER_TOKEN=<token> bash
 #
 # What it does:
 #   1. Installs all base tools (node, pnpm, python, git, gh, docker, pipx)
 #   2. Installs DevBlock tools (wrangler, vercel, playwright, hermes-agent)
-#   3. Clones all active DevBlock repos to ~/devblock/
-#   4. Configures PATH for non-interactive SSH
-#   5. Generates SSH key for mesh access
-#   6. Sets up daily 3am repo sync cron
-#   7. Registers node with Sage mesh (auto-discovery)
+#   3. Configures PATH for non-interactive SSH
+#   4. Generates SSH key for mesh access
+#   5. Registers node with Sage mesh (auto-discovery if token provided)
 # =============================================================================
 set -euo pipefail
 
@@ -24,6 +22,7 @@ info() { echo -e "${BLUE}[i]${NC} $1"; }
 
 # ---- Config ----
 REGISTRATION_URL="${DEVBLOCK_REGISTER_URL:-https://devblock-mesh-registry.devblocktechnologies.workers.dev}"
+REGISTRATION_TOKEN="${DEVBLOCK_REGISTER_TOKEN:-}"
 DEVBLOCK_REPOS=()  # Repos are cloned on-demand per task, not auto-installed
 
 echo ""
