@@ -60,11 +60,22 @@ jobs:
             -H "X-Registration-Token: $REGISTRATION_TOKEN" \
             -d "{\"node_id\":\"$NODE_ID\",\"hostname\":\"gh-runner\",\"friendly_name\":\"GitHub Runner\",\"os\":\"ubuntu-latest\",\"arch\":\"x86_64\",\"cpu\":\"4 vCPU\",\"ram\":\"16GB\",\"disk\":\"14GB\",\"role\":\"compute\",\"provider\":\"github-actions\",\"capabilities\":[\"builds\",\"heavy-tasks\",\"playwright\",\"wrangler\",\"vercel\"],\"access\":{\"type\":\"http\",\"host\":\"$TUNNEL_URL\",\"port\":443},\"idle_timeout_min\":10,\"notes\":\"GitHub Actions runner via cloudflared tunnel\"}"
 
+          # Log runner lifecycle event: registered
+          curl -s -X POST "$REGISTRY_URL/runners/event" \
+            -H "Content-Type: application/json" \
+            -H "X-Registration-Token: $REGISTRATION_TOKEN" \
+            -d "{\"runner_id\":\"$NODE_ID\",\"event\":\"registered\",\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"tunnel_url\":\"$TUNNEL_URL\",\"notes\":\"Runner registered via GitHub Actions\"}"
+
           echo "RUNNER_READY: $NODE_ID at $TUNNEL_URL"
 
           # Cleanup handler — catches SIGTERM from GitHub 6h timeout
           cleanup() {
             echo "CLEANUP: runner shutting down"
+            # Log runner lifecycle event: terminated
+            curl -s -X POST "$REGISTRY_URL/runners/event" \
+              -H "Content-Type: application/json" \
+              -H "X-Registration-Token: $REGISTRATION_TOKEN" \
+              -d "{\"runner_id\":\"$NODE_ID\",\"event\":\"terminated\",\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"notes\":\"Runner terminating via cleanup handler\"}"
             curl -s -X POST "$TUNNEL_URL/shutdown" 2>/dev/null || true
             wait $SERVER_PID 2>/dev/null || true
             kill $TUNNEL_PID 2>/dev/null || true

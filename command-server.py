@@ -13,6 +13,27 @@ NODE_ID = os.environ.get('RUNNER_NODE_ID', '')
 REGISTRY_URL = os.environ.get('REGISTRY_URL', 'https://devblock-mesh-registry.devblocktechnologies.workers.dev')
 REGISTRATION_TOKEN = os.environ.get('REGISTRATION_TOKEN', '')
 
+def send_runner_event(event_type, extra=None):
+    """POST a runner lifecycle event to the mesh registry."""
+    try:
+        payload = {
+            "runner_id": NODE_ID,
+            "event": event_type,
+            "timestamp": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+        }
+        if extra:
+            payload.update(extra)
+        req = urllib.request.Request(
+            f"{REGISTRY_URL}/runners/event",
+            data=json.dumps(payload).encode(),
+            method='POST'
+        )
+        req.add_header('Content-Type', 'application/json')
+        req.add_header('X-Registration-Token', REGISTRATION_TOKEN)
+        urllib.request.urlopen(req, timeout=10)
+    except Exception as e:
+        print(f"  -> runner event failed: {e}")
+
 def cleanup():
     """Announce shutdown to mesh registry so Sage removes us from the mesh."""
     print(f"CLEANUP: deregistering {NODE_ID} from mesh...")
@@ -76,6 +97,12 @@ class Handler(BaseHTTPRequestHandler):
                     'exit_code': result.returncode
                 }).encode())
                 LAST_ACTIVE = time.time()
+                # Log exec lifecycle event
+                send_runner_event('exec', {
+                    'command': cmd,
+                    'exit_code': result.returncode,
+                    'notes': f'Command completed with exit code {result.returncode}',
+                })
             except subprocess.TimeoutExpired:
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
