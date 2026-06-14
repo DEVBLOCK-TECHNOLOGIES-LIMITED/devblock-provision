@@ -24,15 +24,7 @@ info() { echo -e "${BLUE}[i]${NC} $1"; }
 
 # ---- Config ----
 REGISTRATION_URL="${DEVBLOCK_REGISTER_URL:-https://devblock-mesh-registry.devblocktechnologies.workers.dev}"
-REGISTRATION_TOKEN="${DEVBLOCK_REGISTER_TOKEN:-}"
-DEVBLOCK_REPOS=(
-  "ojibona1/bigglesworth"
-  "ojibona1/converseiq"
-  "ojibona1/devblock-console"
-  "ojibona1/Hybrid-Travels-Tour"
-  "ojibona1/nutriaire"
-  "ojibona1/payiq"
-)
+DEVBLOCK_REPOS=()  # Repos are cloned on-demand per task, not auto-installed
 
 echo ""
 echo "  ╔══════════════════════════════════════════╗"
@@ -173,7 +165,7 @@ log "SSH key: $(echo "$PUBKEY" | awk '{print $1, $3}')"
 
 # Add Sage's public key for reverse access (Sage → node)
 log "Fetching Sage's public key for authorized_keys..."
-SAGE_PUBKEY=$(curl -sSL --connect-timeout 5 "https://raw.githubusercontent.com/DEVBLOCK-TECHNOLOGIES-LIMITED/sage-bootstrap/main/sage.pub" 2>/dev/null || echo "")
+SAGE_PUBKEY=$(curl -sSL --connect-timeout 5 "https://raw.githubusercontent.com/DEVBLOCK-TECHNOLOGIES-LIMITED/devblock-provision/main/sage.pub" 2>/dev/null || echo "")
 if [ -n "$SAGE_PUBKEY" ]; then
   if ! grep -qF "$SAGE_PUBKEY" ~/.ssh/authorized_keys 2>/dev/null; then
     echo "$SAGE_PUBKEY" >> ~/.ssh/authorized_keys
@@ -186,40 +178,16 @@ else
   warn "Could not fetch Sage's public key. SSH access from Sage will need manual setup."
 fi
 
-# ---- Phase 5: Repo Cloning ----
+# ---- Phase 5: SSH Access for Sage ----
 echo ""
-echo "--- Phase 5: Cloning Repos ---"
+echo "--- Phase 5: SSH Access for Sage ---"
 
-mkdir -p ~/devblock
-for repo in "${DEVBLOCK_REPOS[@]}"; do
-  REPO_NAME=$(basename "$repo")
-  if [ -d "$HOME/devblock/$REPO_NAME" ]; then
-    log "$REPO_NAME: already exists, pulling latest..."
-    (cd "$HOME/devblock/$REPO_NAME" && git pull --ff-only 2>/dev/null) || warn "$REPO_NAME: pull failed (local changes?)"
-  else
-    log "Cloning $repo..."
-    git clone "https://github.com/$repo.git" "$HOME/devblock/$REPO_NAME" >/dev/null 2>&1 || {
-      warn "Failed to clone $repo (private repo? skip if not needed)"
-    }
-  fi
-done
+# Repos are NOT auto-cloned — they contain company IP.
+# Sage clones repos on-demand when running specific tasks on this node.
 
-# ---- Phase 6: Cron Jobs ----
+# ---- Phase 6: Registration ----
 echo ""
-echo "--- Phase 6: Cron Jobs ---"
-
-# Daily 3am repo sync
-CRON_JOB="0 3 * * * for d in \$HOME/devblock/*/; do cd \"\$d\" && git fetch origin 2>/dev/null && git pull --ff-only 2>/dev/null; done"
-if ! crontab -l 2>/dev/null | grep -qF "devblock/*/"; then
-  (crontab -l 2>/dev/null; echo "$CRON_JOB") | crontab -
-  log "Daily 3am repo sync cron set"
-else
-  log "Repo sync cron already set"
-fi
-
-# ---- Phase 7: Mesh Registration ----
-echo ""
-echo "--- Phase 7: Mesh Registration ---"
+echo "--- Phase 6: Mesh Registration ---"
 
 REGISTRATION=$(cat <<EOF
 {
@@ -288,7 +256,7 @@ echo "  ╔═══════════════════════
 echo "  ║   Provisioning Complete                 ║"
 echo "  ╚══════════════════════════════════════════╝"
 echo ""
-log "Node is ready. Tools installed, repos cloned, cron active."
+log "Node is ready. Tools installed, SSH configured, mesh registered."
 echo ""
 
 # Print summary
